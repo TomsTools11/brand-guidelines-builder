@@ -10,7 +10,7 @@ Brand Guidelines Generator - A web tool that automatically generates professiona
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js 14)                         │
+│                    FRONTEND (Next.js 16)                         │
 │  URL Input → Progress Polling → Preview → Download               │
 └─────────────────────────────────────────────────────────────────┘
                                 │ HTTP
@@ -37,109 +37,57 @@ Brand Guidelines Generator - A web tool that automatically generates professiona
                          └─────────────┘
 ```
 
-## Directory Structure
+## Development Commands
 
-```
-brand-guidelines-builder/
-├── backend/
-│   ├── pyproject.toml              # Python dependencies
-│   ├── .env.example                # Environment variables template
-│   ├── docker-compose.yml          # Redis for local dev
-│   └── src/
-│       ├── main.py                 # FastAPI app entry point
-│       ├── config.py               # Pydantic settings
-│       ├── celery_app.py           # Celery configuration
-│       ├── models/
-│       │   ├── brand_data.py       # ExtractedBrand, ColorPalette, Typography, etc.
-│       │   └── job.py              # JobStatus, JobProgress
-│       ├── api/
-│       │   └── routes.py           # FastAPI endpoints
-│       ├── workers/
-│       │   └── tasks.py            # Celery extraction task
-│       ├── scraper/
-│       │   └── website_scraper.py  # Playwright-based scraper
-│       ├── extractors/
-│       │   ├── color_extractor.py  # CSS/image color extraction
-│       │   ├── typography_extractor.py  # Font detection
-│       │   ├── logo_extractor.py   # Logo finding/download
-│       │   └── ai_analyzer.py      # Claude API brand content
-│       ├── generator/
-│       │   └── pdf_generator.py    # ReportLab PDF generation
-│       └── utils/
-│           └── color_utils.py      # Hex/RGB/CMYK/Pantone conversion
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx                # URL input form
-│   │   ├── extract/[jobId]/page.tsx  # Progress polling
-│   │   └── preview/[jobId]/page.tsx  # Download page
-│   ├── package.json
-│   └── tailwind.config.ts
-└── brand_guidelines_template.py    # Original template (reference)
-```
-
-## Development Setup
-
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Redis (or Docker)
-
-### Backend Setup
+### Backend (from `backend/` directory)
 
 ```bash
-cd backend
-
-# Create virtual environment
+# Setup (first time)
 python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies
+source venv/bin/activate
 pip install -e .
-
-# Install Playwright browsers
+pip install -e ".[dev]"
 playwright install chromium
+cp .env.example .env  # Then add ANTHROPIC_API_KEY
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env to add:
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   REDIS_URL=redis://localhost:6379/0
-
-# Start Redis (local development)
+# Start Redis
 docker compose up -d
 
-# Start FastAPI server
+# Run FastAPI server
 uvicorn src.main:app --reload --port 8000
 
-# Start Celery worker (separate terminal)
+# Run Celery worker (separate terminal)
 celery -A src.celery_app worker --loglevel=info
+
+# Linting
+ruff check src/
+ruff format src/
+
+# Testing
+pytest tests/
+pytest tests/test_specific.py -v  # Single test file
 ```
 
-### Frontend Setup
+### Frontend (from `frontend/` directory)
 
 ```bash
-cd frontend
-
-# Install dependencies
+# Setup
 npm install
 
-# Start dev server
+# Development server
 npm run dev
+
+# Linting
+npm run lint
+
+# Build
+npm run build
 ```
 
 ### Access Points
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/jobs` | Create extraction job (body: `{"url": "..."}`) |
-| GET | `/api/jobs/{id}` | Get job status and progress |
-| GET | `/api/jobs/{id}/pdf` | Download generated PDF |
-| GET | `/api/health` | Health check |
 
 ## Job Status Flow
 
@@ -150,34 +98,28 @@ EXTRACTING_LOGO → GENERATING_CONTENT → BUILDING_PDF → COMPLETED
 
 On failure: Any status → FAILED (with error_message)
 
-## Key Models
+## Key Backend Modules
 
-### ExtractedBrand (brand_data.py)
-Complete brand data structure containing:
-- `company_name`, `tagline`, `domain`
-- `colors`: ColorPalette (primary, secondary, accent, neutrals)
-- `typography`: Typography (primary font, secondary, fallback)
-- `logo`: LogoAsset (URL, binary data, format)
-- AI-generated content: positioning, mission, vision, pillars, traits, voice guidelines
-
-### JobProgress (job.py)
-```python
-class JobProgress:
-    job_id: str
-    status: JobStatus
-    progress_percent: int
-    current_step: str
-    error_message: Optional[str]
-    pdf_path: Optional[str]
-```
+| Module | Location | Purpose |
+|--------|----------|---------|
+| API Routes | `src/api/routes.py` | FastAPI endpoints |
+| Celery Tasks | `src/workers/tasks.py` | Background job orchestration |
+| Website Scraper | `src/scraper/website_scraper.py` | Playwright-based scraping |
+| Color Extractor | `src/extractors/color_extractor.py` | CSS/image color extraction |
+| Typography Extractor | `src/extractors/typography_extractor.py` | Font detection |
+| Logo Extractor | `src/extractors/logo_extractor.py` | Logo finding/download |
+| AI Analyzer | `src/extractors/ai_analyzer.py` | Claude API brand content |
+| PDF Generator | `src/generator/pdf_generator.py` | ReportLab PDF generation |
+| Brand Data Models | `src/models/brand_data.py` | ExtractedBrand, ColorPalette, Typography |
+| Job Models | `src/models/job.py` | JobStatus, JobProgress |
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Claude API key | `sk-ant-...` |
-| `REDIS_URL` | Redis connection URL | `redis://localhost:6379/0` |
-| `NEXT_PUBLIC_API_URL` | Backend URL for frontend | `http://localhost:8000` |
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key (required) |
+| `REDIS_URL` | Redis connection URL (default: `redis://localhost:6379/0`) |
+| `NEXT_PUBLIC_API_URL` | Backend URL for frontend (default: `http://localhost:8000`) |
 
 ## Deployment (Railway)
 
@@ -185,11 +127,3 @@ class JobProgress:
 2. **Worker Service**: `celery -A src.celery_app worker --loglevel=info`
 3. **Redis**: Use Railway Redis plugin
 4. **Frontend**: Deploy to Vercel with `NEXT_PUBLIC_API_URL` pointing to Railway backend
-
-## Testing a Full Flow
-
-1. Start all services (Redis, FastAPI, Celery worker, Next.js)
-2. Navigate to http://localhost:3000
-3. Enter a URL (e.g., `https://stripe.com`)
-4. Watch extraction progress (~1-2 minutes)
-5. Download the generated PDF
